@@ -3,7 +3,7 @@
  */
 
 import { FastifyInstance } from 'fastify';
-import { PrismaClient } from '@prisma/client';
+import prismaPkg from '@prisma/client';
 import { FolderService } from './folder.service.js';
 import {
   getFoldersSchema,
@@ -13,6 +13,8 @@ import {
   deleteFolderSchema,
   getFolderChildrenSchema,
 } from './folder.schema.js';
+
+const { PrismaClient } = prismaPkg;
 
 export async function registerFolderRoutes(app: FastifyInstance) {
   const prisma = new PrismaClient();

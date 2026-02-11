@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ExcalidrawWrapper } from '@/components/editor/ExcalidrawWrapper';
@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { fileApi } from '@/lib/api';
 import { createExcalidrawAdapter } from '@/lib/excalidraw/adapter';
 import { toast } from 'sonner';
-import { Save, ArrowLeft } from 'lucide-react';
+import { Save, ArrowLeft, Loader2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,52 +25,93 @@ export default function EditorPage() {
   const router = useRouter();
   const fileId = params.id as string;
 
+  const adapter = useMemo(() => createExcalidrawAdapter(), []);
+  const autoSaveTimerRef = useRef<number | null>(null);
+  const pendingAutoSaveRef = useRef(false);
+  const isMountedRef = useRef(true);
+
   const [content, setContent] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string>('');
   const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
 
   useEffect(() => {
-    loadFile();
-  }, [fileId]);
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (autoSaveTimerRef.current) {
+        window.clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, []);
 
-  const loadFile = async () => {
+  const loadFile = useCallback(async () => {
     setLoading(true);
     try {
       const file = await fileApi.getById(fileId);
       setFileName(file.name);
       setContent(file.content || '{}');
+      setDirty(false);
+      setLastSavedAt(null);
     } catch (error: any) {
-      toast.error(error.message || '加载失败');
+      // PRD: 404 → “文件不存在”，其他错误 → “加载失败：{detail}”
+      const msg = String(error?.message || '');
+      if (msg.includes('资源不存在') || msg.includes('404')) {
+        toast.error('文件不存在');
+      } else {
+        toast.error(msg || '加载失败');
+      }
       router.push('/');
     } finally {
       setLoading(false);
     }
-  };
+  }, [fileId, router]);
 
-  const handleSave = async () => {
-    if (!dirty) {
-      toast.info('没有未保存的更改');
+  useEffect(() => {
+    loadFile();
+  }, [loadFile]);
+
+  const performSave = useCallback(async (source: 'manual' | 'auto') => {
+    if (!dirty) return;
+    if (saving) {
+      if (source === 'auto') {
+        pendingAutoSaveRef.current = true;
+      }
       return;
     }
 
     setSaving(true);
     try {
-      const adapter = createExcalidrawAdapter();
       const serialized = adapter.serialize();
       const contentStr = JSON.stringify(serialized);
 
       await fileApi.update(fileId, { content: contentStr });
       adapter.markSaved();
-      toast.success('保存成功');
+      setLastSavedAt(Math.floor(Date.now() / 1000));
+      if (source === 'manual') {
+        toast.success('保存成功');
+      }
     } catch (error: any) {
-      toast.error(error.message || '保存失败');
+      toast.error(error.message || (source === 'auto' ? '自动保存失败' : '保存失败'));
     } finally {
       setSaving(false);
+      if (!isMountedRef.current) return;
+      if (pendingAutoSaveRef.current) {
+        pendingAutoSaveRef.current = false;
+        // "last change wins": schedule one more save quickly
+        window.setTimeout(() => {
+          performSave('auto');
+        }, 200);
+      }
     }
+  }, [adapter, dirty, fileId, saving]);
+
+  const handleSave = async () => {
+    await performSave('manual');
   };
 
   const handleBack = () => {
@@ -86,16 +127,30 @@ export default function EditorPage() {
     router.push(pendingNavigation || '/');
   };
 
-  // Auto-save (every 30 seconds if dirty)
+  // Auto-save: debounce 1.5s after dirty change
   useEffect(() => {
+    if (autoSaveTimerRef.current) {
+      window.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
     if (!dirty) return;
 
-    const interval = setInterval(() => {
-      handleSave();
-    }, 30000); // 30 seconds
+    autoSaveTimerRef.current = window.setTimeout(() => {
+      performSave('auto');
+    }, 1500);
+  }, [dirty, performSave]);
 
-    return () => clearInterval(interval);
-  }, [dirty]);
+  const saveStatusText = (() => {
+    if (saving) return '自动保存中...';
+    if (dirty) return '未保存';
+    if (lastSavedAt) {
+      const d = new Date(lastSavedAt * 1000);
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      return `已保存（${hh}:${mm}）`;
+    }
+    return '';
+  })();
 
   if (loading) {
     return (
@@ -118,12 +173,24 @@ export default function EditorPage() {
               返回
             </Button>
             <h1 className="text-lg font-semibold">
-              {fileName}.excalidraw {dirty && <span className="text-muted-foreground">*</span>}
+              {fileName}.excalidraw
+              {saveStatusText ? (
+                <span className="ml-2 text-sm font-normal text-muted-foreground">{saveStatusText}</span>
+              ) : null}
             </h1>
           </div>
           <Button onClick={handleSave} disabled={saving || !dirty}>
-            <Save className="mr-2 h-4 w-4" />
-            {saving ? '保存中...' : '保存'}
+            {saving ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                保存中...
+              </>
+            ) : (
+              <>
+                <Save className="mr-2 h-4 w-4" />
+                保存
+              </>
+            )}
           </Button>
         </div>
 
@@ -132,6 +199,7 @@ export default function EditorPage() {
           <ExcalidrawWrapper
             initialContent={content}
             theme="light"
+            adapter={adapter}
             onDirtyChange={setDirty}
           />
         </div>

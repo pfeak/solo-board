@@ -18,9 +18,7 @@
     "jsx": "preserve",
     "incremental": true,
     "types": [
-      "next",
-      "next/image-types",
-      "next/navigation-types/compat"
+      "next"
     ],
     "plugins": [
       {

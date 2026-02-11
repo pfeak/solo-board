@@ -3,10 +3,12 @@
  */
 
 import bcrypt from 'bcrypt';
-import { PrismaClient } from '@prisma/client';
+import prismaPkg from '@prisma/client';
 import { generateUUID } from '../../lib/uuid.js';
 import { getCurrentTimestamp } from '../../lib/time.js';
 import { UnauthorizedError, BusinessError } from '../../core/errors.js';
+
+const { PrismaClient } = prismaPkg;
 
 const SALT_ROUNDS = 10;
 

@@ -2,10 +2,12 @@
  * Folder module: business logic.
  */
 
-import { PrismaClient } from '@prisma/client';
+import prismaPkg from '@prisma/client';
 import { generateUUID } from '../../lib/uuid.js';
 import { getCurrentTimestamp } from '../../lib/time.js';
 import { NotFoundError, ConflictError, BusinessError } from '../../core/errors.js';
+
+const { PrismaClient } = prismaPkg;
 
 export interface FolderTreeItem {
   id: string;
@@ -20,6 +22,22 @@ export class FolderService {
   constructor(private prisma: PrismaClient) {}
 
   /**
+   * Max folder depth is 2:
+   * - depth 1: parentId = null
+   * - depth 2: parentId = depth 1 folder
+   */
+  private async getFolderDepth(folderId: string): Promise<1 | 2> {
+    const folder = await this.prisma.folder.findUnique({
+      where: { id: folderId },
+      select: { parentId: true },
+    });
+    if (!folder) {
+      throw new NotFoundError('Folder', folderId);
+    }
+    return folder.parentId ? 2 : 1;
+  }
+
+  /**
    * Get folder tree (recursive).
    */
   async getFolderTree(parentId: string | null = null): Promise<FolderTreeItem[]> {
@@ -28,7 +46,7 @@ export class FolderService {
       orderBy: { name: 'asc' },
     });
 
-    const result: FolderTreeItem[] = folders.map((f) => ({
+    const result: FolderTreeItem[] = folders.map((f: { id: string; parentId: string | null; name: string; createdAt: number; updatedAt: number }) => ({
       id: f.id,
       parent_id: f.parentId,
       name: f.name,
@@ -78,23 +96,21 @@ export class FolderService {
       throw new BusinessError('文件夹名称不能为空', 400);
     }
 
-    // Check if parent exists (if parentId is provided)
+    // PRD constraint: max depth 2. Only allow creating:
+    // - level-1: parentId = null
+    // - level-2: parentId = level-1 folder
     if (parentId) {
-      const parent = await this.prisma.folder.findUnique({
-        where: { id: parentId },
-      });
-      if (!parent) {
-        throw new NotFoundError('Parent folder', parentId);
+      const depth = await this.getFolderDepth(parentId);
+      if (depth === 2) {
+        throw new BusinessError('最多只能创建两级目录', 400);
       }
     }
 
     // Check for duplicate name in same parent
-    const existing = await this.prisma.folder.findUnique({
+    const existing = await this.prisma.folder.findFirst({
       where: {
-        parentId_name: {
-          parentId: parentId || null,
-          name: name.trim(),
-        },
+        parentId: parentId || null,
+        name: name.trim(),
       },
     });
 
@@ -157,17 +173,29 @@ export class FolderService {
       if (!target) {
         throw new NotFoundError('Target folder', updates.parent_id);
       }
+
+      // PRD constraint: max depth 2
+      // Moving under a depth-2 folder would create depth-3.
+      const targetDepth = await this.getFolderDepth(updates.parent_id);
+      if (targetDepth === 2) {
+        throw new BusinessError('最多只能创建两级目录', 400);
+      }
+
+      // If moving a folder that has children under another folder (making it depth-2),
+      // its children would become depth-3, which is not allowed.
+      const childrenCount = await this.prisma.folder.count({ where: { parentId: folderId } });
+      if (childrenCount > 0) {
+        throw new BusinessError('包含子目录的文件夹不能移动到其他文件夹下', 400);
+      }
     }
 
     // Check for duplicate name if renaming
     if (updates.name) {
       const newParentId = updates.parent_id !== undefined ? updates.parent_id : folder.parentId;
-      const existing = await this.prisma.folder.findUnique({
+      const existing = await this.prisma.folder.findFirst({
         where: {
-          parentId_name: {
-            parentId: newParentId || null,
-            name: updates.name.trim(),
-          },
+          parentId: newParentId || null,
+          name: updates.name.trim(),
         },
       });
 
@@ -255,13 +283,13 @@ export class FolderService {
     ]);
 
     return {
-      folders: folders.map((f) => ({
+      folders: folders.map((f: { id: string; name: string; createdAt: number; updatedAt: number }) => ({
         id: f.id,
         name: f.name,
         created_at: f.createdAt,
         updated_at: f.updatedAt,
       })),
-      files: files.map((f) => ({
+      files: files.map((f: { id: string; name: string; createdAt: number; updatedAt: number }) => ({
         id: f.id,
         name: f.name,
         created_at: f.createdAt,

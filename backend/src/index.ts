@@ -13,7 +13,7 @@ import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import swaggerUI from '@fastify/swagger-ui';
-import { PrismaClient } from '@prisma/client';
+import prismaPkg from '@prisma/client';
 import bcrypt from 'bcrypt';
 
 import { loadConfig } from './config.js';
@@ -24,6 +24,8 @@ import { registerFileRoutes } from './modules/file/file.routes.js';
 import { generateUUID } from './lib/uuid.js';
 import { getCurrentTimestamp } from './lib/time.js';
 import { verifySessionCookie, SESSION_COOKIE_NAME } from './plugins/session.js';
+
+const { PrismaClient } = prismaPkg;
 
 async function bootstrap() {
   const config = loadConfig();

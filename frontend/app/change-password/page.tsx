@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,25 @@ export default function ChangePasswordPage() {
     newPassword?: string;
     confirmPassword?: string;
   }>({});
+
+  // Guard: only allow when using initial password
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authApi.checkInitialPassword();
+        if (cancelled) return;
+        if (!res.is_initial_password) {
+          router.replace('/');
+        }
+      } catch {
+        // 401 handled by api layer redirect; ignore other errors here
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   const validateForm = (): boolean => {
     const newErrors: {
@@ -74,7 +93,7 @@ export default function ChangePasswordPage() {
       }, 100);
     } catch (error: unknown) {
       const errorMessage = getErrorMessage(error, '修改失败：请稍后重试');
-      
+
       // 检查是否是字段级错误（如"当前密码错误"）
       if (errorMessage.includes('当前密码') || errorMessage.includes('密码错误')) {
         setErrors({ currentPassword: errorMessage });

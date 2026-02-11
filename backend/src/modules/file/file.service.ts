@@ -2,10 +2,12 @@
  * File module: business logic.
  */
 
-import { PrismaClient } from '@prisma/client';
+import prismaPkg from '@prisma/client';
 import { generateUUID } from '../../lib/uuid.js';
 import { getCurrentTimestamp } from '../../lib/time.js';
 import { NotFoundError, ConflictError, BusinessError } from '../../core/errors.js';
+
+const { PrismaClient } = prismaPkg;
 
 export interface FileItem {
   id: string;
@@ -72,7 +74,7 @@ export class FileService {
       total,
       page,
       page_size: pageSize,
-      items: items.map((f) => ({
+      items: items.map((f: { id: string; folderId: string | null; name: string; createdAt: number; updatedAt: number }) => ({
         id: f.id,
         folder_id: f.folderId,
         name: f.name,
@@ -118,24 +120,29 @@ export class FileService {
       throw new BusinessError('文件名不能为空', 400);
     }
 
-    // Check if folder exists (if folderId is provided)
-    if (folderId) {
-      const folder = await this.prisma.folder.findUnique({
-        where: { id: folderId },
-      });
-      if (!folder) {
-        throw new NotFoundError('Folder', folderId);
-      }
+    // PRD constraint: files must belong to a real folder (no root-level files).
+    if (!folderId) {
+      throw new BusinessError('不允许在顶层创建文件，请选择一个目录', 400);
+    }
+
+    // Check if folder exists
+    const folder = await this.prisma.folder.findUnique({
+      where: { id: folderId },
+      select: { id: true },
+    });
+    if (!folder) {
+      throw new NotFoundError('Folder', folderId);
     }
 
     // Check for duplicate name in same folder
-    const existing = await this.prisma.file.findUnique({
+    // NOTE: `findUnique` with a compound unique key does not accept `null` values.
+    // Since `folderId` is nullable (root-level files), use `findFirst` here.
+    const existing = await this.prisma.file.findFirst({
       where: {
-        folderId_name: {
-          folderId: folderId || null,
-          name: name.trim(),
-        },
+        folderId: folderId || null,
+        name: name.trim(),
       },
+      select: { id: true },
     });
 
     if (existing) {
@@ -179,10 +186,14 @@ export class FileService {
       throw new NotFoundError('File', fileId);
     }
 
-    // Check if target folder exists (if folder_id is provided)
-    if (updates.folder_id !== undefined && updates.folder_id !== null) {
+    // PRD constraint: files must belong to a real folder (no moving to root).
+    if (updates.folder_id !== undefined) {
+      if (!updates.folder_id) {
+        throw new BusinessError('不允许移动到顶层，请选择一个目录', 400);
+      }
       const folder = await this.prisma.folder.findUnique({
         where: { id: updates.folder_id },
+        select: { id: true },
       });
       if (!folder) {
         throw new NotFoundError('Target folder', updates.folder_id);
@@ -194,13 +205,13 @@ export class FileService {
       const newFolderId = updates.folder_id !== undefined ? updates.folder_id : file.folderId;
       const newName = updates.name ? updates.name.trim() : file.name;
 
-      const existing = await this.prisma.file.findUnique({
+      // Same reason as `createFile`: allow nullable folderId.
+      const existing = await this.prisma.file.findFirst({
         where: {
-          folderId_name: {
-            folderId: newFolderId || null,
-            name: newName,
-          },
+          folderId: newFolderId || null,
+          name: newName,
         },
+        select: { id: true },
       });
 
       if (existing && existing.id !== fileId) {
