@@ -1,0 +1,56 @@
+// Solo-Board Prisma data models
+// See ai-specs/projects/solo-board/logic/project.md for requirements
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Folder {
+  id        String   @id
+  parentId  String?  @map("parent_id")
+  name      String
+  createdAt Int      @map("created_at")
+  updatedAt Int      @map("updated_at")
+  createdBy String?  @map("created_by")
+
+  parent    Folder?  @relation("FolderToChildren", fields: [parentId], references: [id])
+  children  Folder[] @relation("FolderToChildren")
+  files     File[]
+
+  @@index([parentId])
+  @@unique([parentId, name])
+  @@map("folders")
+}
+
+model File {
+  id        String  @id
+  folderId  String? @map("folder_id")
+  name      String
+  content   String
+  createdAt Int     @map("created_at")
+  updatedAt Int     @map("updated_at")
+  createdBy String? @map("created_by")
+
+  folder    Folder? @relation(fields: [folderId], references: [id])
+
+  @@index([folderId])
+  @@unique([folderId, name])
+  @@map("files")
+}
+
+model Admin {
+  id               String  @id
+  username         String  @unique
+  passwordHash     String  @map("password_hash")
+  createdAt        Int     @map("created_at")
+  lastLoginAt      Int?    @map("last_login_at")
+  isInitialPassword Boolean @default(true) @map("is_initial_password")
+
+  @@map("admins")
+}
+
