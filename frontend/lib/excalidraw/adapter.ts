@@ -68,6 +68,10 @@ class ExcalidrawAdapterImpl implements ExcalidrawAdapter {
   private api: ExcalidrawApiLike | null = null;
   private dirty = false;
   /**
+   * When load() is called before API is ready, store content and apply in bindApi().
+   */
+  private pendingContent: string | null = null;
+  /**
    * Snapshot used for dirty detection.
    * IMPORTANT: Must exclude volatile fields (e.g. updatedAt) to avoid "always dirty".
    */
@@ -75,15 +79,27 @@ class ExcalidrawAdapterImpl implements ExcalidrawAdapter {
   private eventListeners: Set<(evt: ExcalidrawAdapterEvent) => void> = new Set();
 
   bindApi(api: unknown | null): void {
-    this.api = (api as ExcalidrawApiLike | null) || null;
-    if (api) {
-      this.emitEvent({ type: 'ready' });
+    const nextApi = (api as ExcalidrawApiLike | null) || null;
+    this.api = nextApi;
+    if (nextApi) {
+      if (this.pendingContent !== null) {
+        const content = this.pendingContent;
+        this.pendingContent = null;
+        // Defer so Excalidraw has a full frame to initialize before we overwrite scene.
+        setTimeout(() => {
+          if (this.api) this.load(content);
+          this.emitEvent({ type: 'ready' });
+        }, 0);
+      } else {
+        this.emitEvent({ type: 'ready' });
+      }
     }
   }
 
   load(content: string | object | null): void {
     if (!this.api) {
-      this.emitEvent({ type: 'error', message: 'API not ready' });
+      this.pendingContent =
+        content == null ? null : typeof content === 'string' ? content : JSON.stringify(content);
       return;
     }
 
@@ -113,6 +129,13 @@ class ExcalidrawAdapterImpl implements ExcalidrawAdapter {
         }
       }
 
+      // Excalidraw UserList expects appState.collaborators to be an array; when loading
+      // saved state it may be an object (e.g. {} or Map-like), causing "forEach is not a function".
+      if (appState && typeof appState.collaborators !== 'undefined') {
+        const c = appState.collaborators;
+        appState = { ...appState, collaborators: Array.isArray(c) ? c : Object.values(c ?? {}) };
+      }
+
       // Update scene
       this.api.updateScene({
         elements: elements as any,
@@ -123,6 +146,7 @@ class ExcalidrawAdapterImpl implements ExcalidrawAdapter {
       });
 
       this.lastSavedSnapshot = this.createSnapshotFromParts(elements, appState, files);
+      this.pendingContent = null;
       this.dirty = false;
       this.emitEvent({ type: 'change', dirty: false });
     } catch (error: any) {

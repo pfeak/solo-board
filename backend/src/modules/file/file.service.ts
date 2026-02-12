@@ -117,12 +117,12 @@ export class FileService {
   ): Promise<FileItem> {
     // Validate name
     if (!name || name.trim().length === 0) {
-      throw new BusinessError('文件名不能为空', 400);
+      throw new BusinessError('File name cannot be empty', 400);
     }
 
     // PRD constraint: files must belong to a real folder (no root-level files).
     if (!folderId) {
-      throw new BusinessError('不允许在顶层创建文件，请选择一个目录', 400);
+      throw new BusinessError('Please select a folder first', 400);
     }
 
     // Check if folder exists
@@ -146,7 +146,7 @@ export class FileService {
     });
 
     if (existing) {
-      throw new ConflictError('同目录下已存在同名文件');
+      throw new ConflictError('A file with the same name already exists');
     }
 
     const now = getCurrentTimestamp();
@@ -189,7 +189,7 @@ export class FileService {
     // PRD constraint: files must belong to a real folder (no moving to root).
     if (updates.folder_id !== undefined) {
       if (!updates.folder_id) {
-        throw new BusinessError('不允许移动到顶层，请选择一个目录', 400);
+        throw new BusinessError('Please select a folder first', 400);
       }
       const folder = await this.prisma.folder.findUnique({
         where: { id: updates.folder_id },
@@ -215,7 +215,7 @@ export class FileService {
       });
 
       if (existing && existing.id !== fileId) {
-        throw new ConflictError('同目录下已存在同名文件');
+        throw new ConflictError('A file with the same name already exists');
       }
     }
 

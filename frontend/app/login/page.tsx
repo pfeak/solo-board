@@ -7,12 +7,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { authApi } from '@/lib/api';
 import { getErrorMessage } from '@/lib/utils';
+import { setStoredLocale } from '@/lib/locale';
 import { toast } from 'sonner';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { useLocale } from '@/components/LocaleProvider';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { t } = useLocale();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,11 +28,11 @@ export default function LoginPage() {
     const newErrors: { username?: string; password?: string } = {};
 
     if (!username.trim()) {
-      newErrors.username = '请填写用户名';
+      newErrors.username = t('login.validationUsername');
     }
 
     if (!password.trim()) {
-      newErrors.password = '请填写密码';
+      newErrors.password = t('login.validationPassword');
     }
 
     setErrors(newErrors);
@@ -49,18 +52,23 @@ export default function LoginPage() {
 
     try {
       const result = await authApi.login(username, password);
-      // 使用 replace 而不是 push，避免历史记录问题
-      // 稍微延迟确保 Cookie 设置完成
       setTimeout(() => {
         if (result.is_initial_password) {
           router.replace('/change-password');
         } else {
-          router.replace('/');
+          const locale = result.preferences?.locale;
+          if (locale) {
+            setStoredLocale(locale);
+          }
+          if (locale) {
+            router.replace('/');
+          } else {
+            router.replace('/profile/preferences?first=1');
+          }
         }
       }, 100);
     } catch (error: unknown) {
-      // 统一错误处理
-      const errorMessage = getErrorMessage(error, '用户名或密码错误');
+      const errorMessage = getErrorMessage(error, t('login.errorAuth'), t);
       toast.error(errorMessage);
     } finally {
       setLoading(false);
@@ -70,72 +78,85 @@ export default function LoginPage() {
   return (
     <ErrorBoundary>
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="w-full max-w-md space-y-6 rounded-lg border border-border bg-card p-8 shadow-sm">
-          <div className="space-y-2 text-center">
-            <h1 className="text-3xl font-bold">Solo-Board 管理员登录</h1>
+        <div className="flex flex-col items-center w-full max-w-lg px-4">
+          <div className="w-full max-w-lg space-y-6 rounded-2xl border border-border bg-card p-10 shadow-lg shadow-black/5">
+            <div className="space-y-2 text-center">
+              <h1 className="text-3xl font-bold">{t('login.title')}</h1>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="username">{t('login.username')}</Label>
+                <Input
+                  id="username"
+                  type="text"
+                  placeholder={t('login.placeholderUsername')}
+                  value={username}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    if (errors.username) {
+                      setErrors({ ...errors, username: undefined });
+                    }
+                  }}
+                  className={errors.username ? 'border-destructive focus-visible:ring-destructive placeholder:text-muted-foreground/60' : 'placeholder:text-muted-foreground/60'}
+                />
+                {errors.username && (
+                  <p className="mt-1 text-sm text-destructive flex items-center gap-1">
+                    <AlertCircle className="h-4 w-4" />
+                    {errors.username}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">{t('login.password')}</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder={t('login.placeholderPassword')}
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (errors.password) {
+                      setErrors({ ...errors, password: undefined });
+                    }
+                  }}
+                  className={errors.password ? 'border-destructive focus-visible:ring-destructive placeholder:text-muted-foreground/60' : 'placeholder:text-muted-foreground/60'}
+                />
+                {errors.password && (
+                  <p className="mt-1 text-sm text-destructive flex items-center gap-1">
+                    <AlertCircle className="h-4 w-4" />
+                    {errors.password}
+                  </p>
+                )}
+              </div>
+
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {t('login.submitting')}
+                  </>
+                ) : (
+                  t('login.submit')
+                )}
+              </Button>
+            </form>
+
+            <p className="text-center text-sm text-muted-foreground">
+              {t('login.defaultAccount')}
+            </p>
           </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">用户名</Label>
-              <Input
-                id="username"
-                type="text"
-                placeholder="请输入用户名"
-                value={username}
-                onChange={(e) => {
-                  setUsername(e.target.value);
-                  if (errors.username) {
-                    setErrors({ ...errors, username: undefined });
-                  }
-                }}
-                className={errors.username ? 'border-destructive focus-visible:ring-destructive placeholder:text-muted-foreground/60' : 'placeholder:text-muted-foreground/60'}
-              />
-              {errors.username && (
-                <p className="mt-1 text-sm text-destructive flex items-center gap-1">
-                  <AlertCircle className="h-4 w-4" />
-                  {errors.username}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password">密码</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="请输入密码"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (errors.password) {
-                    setErrors({ ...errors, password: undefined });
-                  }
-                }}
-                className={errors.password ? 'border-destructive focus-visible:ring-destructive placeholder:text-muted-foreground/60' : 'placeholder:text-muted-foreground/60'}
-              />
-              {errors.password && (
-                <p className="mt-1 text-sm text-destructive flex items-center gap-1">
-                  <AlertCircle className="h-4 w-4" />
-                  {errors.password}
-                </p>
-              )}
-            </div>
-
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  登录中...
-                </>
-              ) : (
-                '登录'
-              )}
-            </Button>
-          </form>
-
-          <p className="text-center text-sm text-muted-foreground">
-            默认账号：admin / 123456
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            {t('login.poweredByPrefix')}
+            <a
+              href="https://github.com/pfeak/solo-board"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary underline underline-offset-4 hover:no-underline"
+            >
+              {t('login.poweredByLink')}
+            </a>
           </p>
         </div>
       </div>

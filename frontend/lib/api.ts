@@ -8,6 +8,20 @@
  */
 
 /**
+ * API error with a machine-readable code for i18n mapping.
+ * When no backend detail is available, we throw ApiError(code) so the UI can show t('api.xxx').
+ */
+export class ApiError extends Error {
+  constructor(
+    public readonly code: string,
+    message?: string,
+  ) {
+    super(message ?? code);
+    this.name = 'ApiError';
+  }
+}
+
+/**
  * Use same-origin `/api/*` by default and proxy via Next rewrites.
  * This avoids cross-origin cookie issues (SameSite=Strict + localhost/127 mismatch).
  *
@@ -16,6 +30,21 @@
  * - Backend destination is configured via Next rewrites (see `next.config.mjs`).
  */
 const API_BASE_URL = '';
+
+function statusToCode(status: number): string {
+  switch (status) {
+    case 400:
+      return 'BAD_REQUEST';
+    case 403:
+      return 'FORBIDDEN';
+    case 404:
+      return 'NOT_FOUND';
+    case 500:
+      return 'SERVER_ERROR';
+    default:
+      return 'REQUEST_FAILED';
+  }
+}
 
 async function apiRequest<T>(endpoint: string, options?: RequestInit): Promise<T> {
   let response: Response;
@@ -31,82 +60,64 @@ async function apiRequest<T>(endpoint: string, options?: RequestInit): Promise<T
         ...options?.headers,
       },
     });
-  } catch (error) {
-    // 网络错误（fetch 失败、超时等）
-    throw new Error('网络连接失败，请稍后重试');
+  } catch {
+    throw new ApiError('NETWORK_ERROR');
   }
 
-  // 先解析响应，以便获取错误详情
   const result = await response.json().catch(() => null);
 
-  // 401 未认证，自动跳转到登录页
-  // 注意：
-  // 1. 登录 API 本身返回 401 不应该跳转（登录失败是正常的）
-  // 2. 如果当前已经在登录页，不跳转以避免循环
   if (response.status === 401 && typeof window !== 'undefined') {
     const currentPath = window.location.pathname;
     const isLoginEndpoint = endpoint.includes('/api/auth/login');
 
-    // 登录 API 返回 401 不跳转，其他情况才跳转
     if (!isLoginEndpoint && currentPath !== '/login') {
       window.location.href = '/login';
     }
 
-    // 对于登录 API，返回更友好的错误信息
     if (isLoginEndpoint) {
       const detail =
         (result && typeof result === 'object' && 'detail' in result && result.detail) ||
-        '用户名或密码错误';
-      throw new Error(String(detail));
+        null;
+      if (detail && typeof detail === 'string') {
+        throw new Error(detail);
+      }
+      throw new ApiError('UNAUTHORIZED');
     }
 
-    throw new Error('Unauthenticated');
+    throw new ApiError('UNAUTHORIZED');
   }
 
   if (!response.ok) {
-    // 优先使用后端返回的 detail
     const detail =
       (result && typeof result === 'object' && 'detail' in result && result.detail) ||
       null;
 
-    // 根据状态码提供默认错误信息
-    let errorMessage = detail || '请求失败';
-
-    if (!detail) {
-      switch (response.status) {
-        case 400:
-          errorMessage = '请求参数错误';
-          break;
-        case 403:
-          errorMessage = '权限不足';
-          break;
-        case 404:
-          errorMessage = '资源不存在';
-          break;
-        case 500:
-          errorMessage = '服务器错误，请联系管理员或稍后重试';
-          break;
-        default:
-          errorMessage = '请求失败，请稍后重试';
-      }
+    if (detail && typeof detail === 'string') {
+      throw new Error(detail);
     }
-
-    throw new Error(String(errorMessage));
+    throw new ApiError(statusToCode(response.status));
   }
 
   return result as T;
 }
 
+// User preferences (stored in DB)
+export interface UserPreferences {
+  locale?: 'en' | 'zh';
+}
+
 // Auth API
 export const authApi = {
   login: (username: string, password: string) =>
-    apiRequest<{ id: string; username: string; is_initial_password: boolean }>(
-      '/api/auth/login',
-      {
-        method: 'POST',
-        body: JSON.stringify({ username, password }),
-      },
-    ),
+    apiRequest<{
+      id: string;
+      username: string;
+      is_initial_password: boolean;
+      preferences?: UserPreferences | null;
+    }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
   logout: () =>
     apiRequest<{ detail: string }>('/api/auth/logout', {
       method: 'POST',
@@ -118,7 +129,15 @@ export const authApi = {
       created_at: number;
       last_login_at: number | null;
       is_initial_password: boolean;
+      preferences?: UserPreferences | null;
     }>('/api/auth/me'),
+  getPreferences: () =>
+    apiRequest<UserPreferences>('/api/auth/preferences'),
+  setPreferences: (prefs: UserPreferences) =>
+    apiRequest<UserPreferences>('/api/auth/preferences', {
+      method: 'PUT',
+      body: JSON.stringify(prefs),
+    }),
   checkInitialPassword: () =>
     apiRequest<{ is_initial_password: boolean }>('/api/auth/check-initial-password'),
   changePassword: (currentPassword: string, newPassword: string) =>

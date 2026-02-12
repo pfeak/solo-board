@@ -7,12 +7,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { authApi } from '@/lib/api';
 import { getErrorMessage } from '@/lib/utils';
+import { setStoredLocale } from '@/lib/locale';
 import { toast } from 'sonner';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { useLocale } from '@/components/LocaleProvider';
 
 export default function ChangePasswordPage() {
   const router = useRouter();
+  const { t } = useLocale();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -23,7 +26,6 @@ export default function ChangePasswordPage() {
     confirmPassword?: string;
   }>({});
 
-  // Guard: only allow when using initial password
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -34,7 +36,7 @@ export default function ChangePasswordPage() {
           router.replace('/');
         }
       } catch {
-        // 401 handled by api layer redirect; ignore other errors here
+        // 401 handled by api layer
       }
     })();
     return () => {
@@ -50,23 +52,23 @@ export default function ChangePasswordPage() {
     } = {};
 
     if (!currentPassword.trim()) {
-      newErrors.currentPassword = '请填写当前密码';
+      newErrors.currentPassword = t('changePassword.validationCurrent');
     }
 
     if (!newPassword.trim()) {
-      newErrors.newPassword = '请填写新密码';
+      newErrors.newPassword = t('changePassword.validationNew');
     } else {
       if (newPassword.length < 8) {
-        newErrors.newPassword = '新密码长度至少 8 位';
+        newErrors.newPassword = t('changePassword.validationNewLength');
       } else if (!/^(?=.*[a-zA-Z])(?=.*\d)/.test(newPassword)) {
-        newErrors.newPassword = '新密码必须包含字母和数字';
+        newErrors.newPassword = t('changePassword.validationNewFormat');
       }
     }
 
     if (!confirmPassword.trim()) {
-      newErrors.confirmPassword = '请填写确认密码';
+      newErrors.confirmPassword = t('changePassword.validationConfirm');
     } else if (newPassword && newPassword !== confirmPassword) {
-      newErrors.confirmPassword = '确认密码与新密码不一致';
+      newErrors.confirmPassword = t('changePassword.validationMismatch');
     }
 
     setErrors(newErrors);
@@ -86,16 +88,25 @@ export default function ChangePasswordPage() {
 
     try {
       await authApi.changePassword(currentPassword, newPassword);
-      toast.success('密码修改成功');
-      // 使用 replace 避免历史记录问题，并稍微延迟确保 Cookie 写入完成
-      setTimeout(() => {
-        router.replace('/');
+      toast.success(t('changePassword.success'));
+      setTimeout(async () => {
+        try {
+          const me = await authApi.me();
+          const locale = me.preferences?.locale;
+          if (locale) {
+            setStoredLocale(locale);
+            router.replace('/');
+          } else {
+            router.replace('/profile/preferences?first=1');
+          }
+        } catch {
+          router.replace('/');
+        }
       }, 100);
     } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, '修改失败：请稍后重试');
+      const errorMessage = getErrorMessage(error, t('changePassword.fail'), t);
 
-      // 检查是否是字段级错误（如"当前密码错误"）
-      if (errorMessage.includes('当前密码') || errorMessage.includes('密码错误')) {
+      if (errorMessage.includes('当前密码') || errorMessage.includes('密码错误') || errorMessage.toLowerCase().includes('password')) {
         setErrors({ currentPassword: errorMessage });
       } else {
         toast.error(errorMessage);
@@ -110,17 +121,17 @@ export default function ChangePasswordPage() {
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="w-full max-w-md space-y-6 rounded-lg border border-border bg-card p-8 shadow-sm">
           <div className="space-y-2 text-center">
-            <h1 className="text-3xl font-bold">修改密码</h1>
-            <p className="text-muted-foreground">首次登录需要修改密码</p>
+            <h1 className="text-3xl font-bold">{t('changePassword.title')}</h1>
+            <p className="text-muted-foreground">{t('changePassword.subtitle')}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="current-password">当前密码</Label>
+              <Label htmlFor="current-password">{t('changePassword.currentPassword')}</Label>
               <Input
                 id="current-password"
                 type="password"
-                placeholder="请输入当前密码"
+                placeholder={t('changePassword.placeholderCurrent')}
                 value={currentPassword}
                 onChange={(e) => {
                   setCurrentPassword(e.target.value);
@@ -144,12 +155,12 @@ export default function ChangePasswordPage() {
 
             <div className="space-y-2">
               <Label htmlFor="new-password">
-                新密码 <span className="text-destructive">*</span>
+                {t('changePassword.newPassword')} <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="new-password"
                 type="password"
-                placeholder="至少 8 位，包含字母和数字"
+                placeholder={t('changePassword.placeholderNew')}
                 value={newPassword}
                 onChange={(e) => {
                   setNewPassword(e.target.value);
@@ -161,7 +172,7 @@ export default function ChangePasswordPage() {
                     setErrors({
                       ...errors,
                       newPassword: undefined,
-                      confirmPassword: '确认密码与新密码不一致',
+                      confirmPassword: t('changePassword.validationMismatch'),
                     });
                   } else if (confirmPassword && e.target.value === confirmPassword) {
                     setErrors({ ...errors, newPassword: undefined, confirmPassword: undefined });
@@ -183,12 +194,12 @@ export default function ChangePasswordPage() {
 
             <div className="space-y-2">
               <Label htmlFor="confirm-password">
-                确认新密码 <span className="text-destructive">*</span>
+                {t('changePassword.confirmPassword')} <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="confirm-password"
                 type="password"
-                placeholder="请再次输入新密码"
+                placeholder={t('changePassword.placeholderConfirm')}
                 value={confirmPassword}
                 onChange={(e) => {
                   setConfirmPassword(e.target.value);
@@ -199,7 +210,7 @@ export default function ChangePasswordPage() {
                   if (newPassword && e.target.value !== newPassword) {
                     setErrors({
                       ...errors,
-                      confirmPassword: '确认密码与新密码不一致',
+                      confirmPassword: t('changePassword.validationMismatch'),
                     });
                   } else if (newPassword && e.target.value === newPassword) {
                     setErrors({ ...errors, confirmPassword: undefined });
@@ -223,10 +234,10 @@ export default function ChangePasswordPage() {
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  修改中...
+                  {t('changePassword.submitting')}
                 </>
               ) : (
-                '修改密码'
+                t('changePassword.submit')
               )}
             </Button>
           </form>

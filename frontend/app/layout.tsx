@@ -5,7 +5,7 @@ import { Toaster } from '@/components/ui/sonner';
 
 export const metadata: Metadata = {
   title: 'Solo-Board',
-  description: '基于 Excalidraw 的独立画板应用',
+  description: 'Standalone whiteboard app based on Excalidraw',
 };
 
 export default function RootLayout({
@@ -14,8 +14,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="zh-CN">
-      <body className="min-h-screen bg-background text-foreground">
+    <html lang="en" className="h-full" suppressHydrationWarning>
+      <body className="h-full min-h-screen bg-background text-foreground antialiased">
         <Providers>
           {children}
           <Toaster />

@@ -28,15 +28,20 @@ export function ExcalidrawWrapper({
   const lastLoadedContentRef = useRef<string | null>(null);
 
   useEffect(() => {
-    // Subscribe to events
     const unsubscribe = adapter.onEvent((evt) => {
       if (evt.type === 'change') {
         onDirtyChange?.(evt.dirty);
       }
+      // When API becomes ready, re-apply initial content so we never show empty after load.
+      if (evt.type === 'ready' && initialContent !== undefined) {
+        const normalized = initialContent ?? null;
+        adapter.load(normalized);
+        lastLoadedContentRef.current = normalized;
+      }
     });
 
     return unsubscribe;
-  }, [adapter, onDirtyChange]);
+  }, [adapter, onDirtyChange, initialContent]);
 
   useEffect(() => {
     adapter.setTheme(theme);
@@ -53,6 +58,20 @@ export function ExcalidrawWrapper({
     if (lastLoadedContentRef.current === normalized) return;
     adapter.load(normalized);
     lastLoadedContentRef.current = normalized;
+
+    // Fallback: re-apply after two frames so we run after Excalidraw has fully mounted.
+    let cancelled = false;
+    const raf1 = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!cancelled && lastLoadedContentRef.current === normalized) {
+          adapter.load(normalized);
+        }
+      });
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf1);
+    };
   }, [adapter, initialContent]);
 
   return (

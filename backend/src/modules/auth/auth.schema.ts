@@ -22,6 +22,13 @@ export const loginSchema: FastifySchema = {
         id: { type: 'string' },
         username: { type: 'string' },
         is_initial_password: { type: 'boolean' },
+        preferences: {
+          type: 'object',
+          nullable: true,
+          properties: {
+            locale: { type: 'string', enum: ['en', 'zh'] },
+          },
+        },
       },
     },
     401: {
@@ -58,6 +65,57 @@ export const meSchema: FastifySchema = {
         created_at: { type: 'number' },
         last_login_at: { type: 'number', nullable: true },
         is_initial_password: { type: 'boolean' },
+        preferences: {
+          type: 'object',
+          nullable: true,
+          properties: {
+            locale: { type: 'string', enum: ['en', 'zh'] },
+          },
+        },
+      },
+    },
+    401: {
+      type: 'object',
+      properties: {
+        detail: { type: 'string' },
+      },
+    },
+  },
+};
+
+export const getPreferencesSchema: FastifySchema = {
+  description: 'Get current user preferences',
+  tags: ['auth'],
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        locale: { type: 'string', enum: ['en', 'zh'] },
+      },
+    },
+    401: {
+      type: 'object',
+      properties: {
+        detail: { type: 'string' },
+      },
+    },
+  },
+};
+
+export const putPreferencesSchema: FastifySchema = {
+  description: 'Update current user preferences',
+  tags: ['auth'],
+  body: {
+    type: 'object',
+    properties: {
+      locale: { type: 'string', enum: ['en', 'zh'] },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        locale: { type: 'string', enum: ['en', 'zh'] },
       },
     },
     401: {

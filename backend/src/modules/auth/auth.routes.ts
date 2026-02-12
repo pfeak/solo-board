@@ -9,6 +9,8 @@ import {
   loginSchema,
   logoutSchema,
   meSchema,
+  getPreferencesSchema,
+  putPreferencesSchema,
   checkInitialPasswordSchema,
   changePasswordSchema,
 } from './auth.schema.js';
@@ -73,6 +75,30 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     return admin;
   });
 
+  // Get preferences
+  app.get('/api/auth/preferences', { schema: getPreferencesSchema }, async (request, reply) => {
+    const session = (request as any).session;
+    if (!session) {
+      return reply.status(401).send({ detail: 'Unauthorized' });
+    }
+
+    const prefs = await authService.getPreferences(session.adminId);
+    return prefs ?? {};
+  });
+
+  // Put preferences
+  app.put<{
+    Body: { locale?: 'en' | 'zh' };
+  }>('/api/auth/preferences', { schema: putPreferencesSchema }, async (request, reply) => {
+    const session = (request as any).session;
+    if (!session) {
+      return reply.status(401).send({ detail: 'Unauthorized' });
+    }
+
+    const updated = await authService.setPreferences(session.adminId, request.body);
+    return updated;
+  });
+
   // Check initial password
   app.get(
     '/api/auth/check-initial-password',
@@ -107,7 +133,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           request.body.new_password,
         );
 
-        return { detail: '密码修改成功' };
+        return { detail: 'Password changed successfully' };
       } catch (error: any) {
         if (error.statusCode) {
           return reply.status(error.statusCode).send({ detail: error.message });

@@ -38,7 +38,7 @@ export class FolderService {
   }
 
   /**
-   * Get folder tree (recursive).
+   * Get folder list (one level only: root folders).
    */
   async getFolderTree(parentId: string | null = null): Promise<FolderTreeItem[]> {
     const folders = await this.prisma.folder.findMany({
@@ -46,20 +46,13 @@ export class FolderService {
       orderBy: { name: 'asc' },
     });
 
-    const result: FolderTreeItem[] = folders.map((f: { id: string; parentId: string | null; name: string; createdAt: number; updatedAt: number }) => ({
+    return folders.map((f: { id: string; parentId: string | null; name: string; createdAt: number; updatedAt: number }) => ({
       id: f.id,
       parent_id: f.parentId,
       name: f.name,
       created_at: f.createdAt,
       updated_at: f.updatedAt,
     }));
-
-    // Recursively load children
-    for (const folder of result) {
-      folder.children = await this.getFolderTree(folder.id);
-    }
-
-    return result;
   }
 
   /**
@@ -93,17 +86,12 @@ export class FolderService {
   ): Promise<FolderTreeItem> {
     // Validate name
     if (!name || name.trim().length === 0) {
-      throw new BusinessError('文件夹名称不能为空', 400);
+      throw new BusinessError('Folder name cannot be empty', 400);
     }
 
-    // PRD constraint: max depth 2. Only allow creating:
-    // - level-1: parentId = null
-    // - level-2: parentId = level-1 folder
+    // PRD constraint: only one level. All folders must be under root.
     if (parentId) {
-      const depth = await this.getFolderDepth(parentId);
-      if (depth === 2) {
-        throw new BusinessError('最多只能创建两级目录', 400);
-      }
+      throw new BusinessError('Only one level of folders is supported', 400);
     }
 
     // Check for duplicate name in same parent
@@ -115,7 +103,7 @@ export class FolderService {
     });
 
     if (existing) {
-      throw new ConflictError('同目录下已存在同名文件夹');
+      throw new ConflictError('A folder with the same name already exists');
     }
 
     const now = getCurrentTimestamp();
@@ -154,39 +142,9 @@ export class FolderService {
       throw new NotFoundError('Folder', folderId);
     }
 
-    // Prevent moving folder into itself or its descendants
-    if (updates.parent_id) {
-      if (updates.parent_id === folderId) {
-        throw new BusinessError('不能将文件夹移动到自身', 400);
-      }
-
-      // Check if target is a descendant
-      const isDescendant = await this.isDescendant(folderId, updates.parent_id);
-      if (isDescendant) {
-        throw new BusinessError('不能将文件夹移动到其子目录中', 400);
-      }
-
-      // Check if target exists
-      const target = await this.prisma.folder.findUnique({
-        where: { id: updates.parent_id },
-      });
-      if (!target) {
-        throw new NotFoundError('Target folder', updates.parent_id);
-      }
-
-      // PRD constraint: max depth 2
-      // Moving under a depth-2 folder would create depth-3.
-      const targetDepth = await this.getFolderDepth(updates.parent_id);
-      if (targetDepth === 2) {
-        throw new BusinessError('最多只能创建两级目录', 400);
-      }
-
-      // If moving a folder that has children under another folder (making it depth-2),
-      // its children would become depth-3, which is not allowed.
-      const childrenCount = await this.prisma.folder.count({ where: { parentId: folderId } });
-      if (childrenCount > 0) {
-        throw new BusinessError('包含子目录的文件夹不能移动到其他文件夹下', 400);
-      }
+    // PRD constraint: only one level. Folders can only be moved to root (parent_id = null).
+    if (updates.parent_id !== undefined && updates.parent_id !== null) {
+      throw new BusinessError('Only one level of folders is supported', 400);
     }
 
     // Check for duplicate name if renaming
@@ -200,7 +158,7 @@ export class FolderService {
       });
 
       if (existing && existing.id !== folderId) {
-        throw new ConflictError('同目录下已存在同名文件夹');
+        throw new ConflictError('A folder with the same name already exists');
       }
     }
 
@@ -239,7 +197,7 @@ export class FolderService {
     }
 
     if (folder.children.length > 0 || folder.files.length > 0) {
-      throw new BusinessError('文件夹不为空，无法删除', 400);
+      throw new BusinessError('Folder is not empty and cannot be deleted', 400);
     }
 
     await this.prisma.folder.delete({
