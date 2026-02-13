@@ -4,6 +4,10 @@ A lightweight, self-hosted solo whiteboard built on Excalidraw, designed for per
 
 If you find this useful, a star would be appreciated. Pull requests and issues are welcome.
 
+![Demo 1](docs/assets/demo1.png)
+
+![Demo 2](docs/assets/demo2.png)
+
 ## Quick Start
 
 ### Docker (recommended)
