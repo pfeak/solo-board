@@ -45,6 +45,8 @@ export type ExcalidrawAdapter = {
   markSaved(): void;
   setTheme(theme: ExcalidrawTheme): void;
   refresh(): void;
+  /** Scroll viewport to the center of all scene content; no-op if API not ready or unsupported. */
+  scrollToContentCenter(): void;
   /**
    * Called by Wrapper when Excalidraw onChange fires.
    * This keeps Excalidraw details out of the page layer.
@@ -62,6 +64,8 @@ type ExcalidrawApiLike = {
   getSceneElements(): unknown[];
   getAppState(): Record<string, unknown>;
   getFiles(): Record<string, unknown>;
+  /** Scroll viewport to content center (all elements); optional in older Excalidraw */
+  scrollToContent?(target?: unknown, opts?: { animate?: boolean }): void;
 };
 
 class ExcalidrawAdapterImpl implements ExcalidrawAdapter {
@@ -209,6 +213,17 @@ class ExcalidrawAdapterImpl implements ExcalidrawAdapter {
         elements,
         appState,
       });
+    }
+  }
+
+  scrollToContentCenter(): void {
+    if (!this.api?.scrollToContent) return;
+    try {
+      // Scroll all scene elements to viewport center; animate for smoother UX
+      this.api.scrollToContent(undefined, { animate: true });
+    } catch {
+      // Ignore if Excalidraw version doesn't support options
+      this.api.scrollToContent?.();
     }
   }
 

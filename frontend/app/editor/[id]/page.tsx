@@ -35,6 +35,8 @@ export default function EditorPage() {
   const pendingAutoSaveRef = useRef(false);
   const isMountedRef = useRef(true);
   const lastFolderIdRef = useRef<string | null>(null);
+  /** 当前文件是否已触发过“滚动到内容中心”，用于切换画板后只执行一次 */
+  const scrollToCenterTriggeredForRef = useRef<string | null>(null);
 
   const [currentFileId, setCurrentFileId] = useState<string>(fileId);
   const [content, setContent] = useState<string | null>(null);
@@ -110,10 +112,26 @@ export default function EditorPage() {
     }
   }, [fileId]);
 
+  // Reset scroll-to-center trigger when switching to another board so we run once per board load
+  useEffect(() => {
+    scrollToCenterTriggeredForRef.current = null;
+  }, [currentFileId]);
+
   // Load file when currentFileId changes
   useEffect(() => {
     loadFile(currentFileId);
   }, [currentFileId, loadFile]);
+
+  // 选择画板并成功加载内容后，自动将视口滚动到画板内容最中心（仅执行一次，避免覆盖/重复）
+  useEffect(() => {
+    if (loading || content === null) return;
+    if (scrollToCenterTriggeredForRef.current === currentFileId) return;
+    scrollToCenterTriggeredForRef.current = currentFileId;
+    const t = window.setTimeout(() => {
+      adapter.scrollToContentCenter();
+    }, 150);
+    return () => window.clearTimeout(t);
+  }, [loading, content, currentFileId, adapter]);
 
   // Handle browser back/forward navigation
   useEffect(() => {
