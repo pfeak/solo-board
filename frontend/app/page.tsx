@@ -222,26 +222,22 @@ export default function HomePage() {
   };
 
   const handleOpenMove = (target: NodeActionTarget) => {
-    setMoveTarget(target);
+    // 仅支持文件移动，不支持文件夹移动
     if (target.type === 'folder') {
-      setMoveToFolderId(null);
-    } else {
-      setMoveToFolderId(target.folder_id);
+      return;
     }
+    setMoveTarget(target);
+    setMoveToFolderId(target.folder_id);
   };
 
   const handleMove = async () => {
-    if (!moveTarget) return;
-    if (moveTarget.type === 'file' && !moveToFolderId) {
+    if (!moveTarget || moveTarget.type !== 'file') return;
+    if (!moveToFolderId) {
       toast.error(t('home.validationSelectTarget'));
       return;
     }
     try {
-      if (moveTarget.type === 'folder') {
-        await folderApi.update(moveTarget.id, { parent_id: null });
-      } else {
-        await fileApi.update(moveTarget.id, { folder_id: moveToFolderId });
-      }
+      await fileApi.update(moveTarget.id, { folder_id: moveToFolderId });
       toast.success(t('home.moveSuccess'));
       setMoveTarget(null);
       await loadTree();
@@ -325,10 +321,6 @@ export default function HomePage() {
             <DropdownMenuItem onClick={() => handleOpenRename({ type: 'folder', id: node.id, name: node.name, parent_id: node.parent_id })}>
               <Edit2 className="mr-2 h-4 w-4" />
               {t('home.rename')}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleOpenMove({ type: 'folder', id: node.id, name: node.name, parent_id: node.parent_id })}>
-              <ArrowRightLeft className="mr-2 h-4 w-4" />
-              {t('home.move')}
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
@@ -559,31 +551,27 @@ export default function HomePage() {
       </Dialog>
 
       {/* Move Dialog */}
-      <Dialog open={!!moveTarget} onOpenChange={(open) => !open && setMoveTarget(null)}>
+      <Dialog open={!!moveTarget && moveTarget.type === 'file'} onOpenChange={(open) => !open && setMoveTarget(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{moveTarget?.type === 'folder' ? t('home.moveFolder') : t('home.moveFile')}</DialogTitle>
+            <DialogTitle>{t('home.moveFile')}</DialogTitle>
             <DialogDescription>{t('home.moveDesc')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="move-target">{t('home.targetFolder')}</Label>
-            {moveTarget?.type === 'file' ? (
-              <select
-                id="move-target"
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                value={moveToFolderId ?? ''}
-                onChange={(e) => setMoveToFolderId(e.target.value || null)}
-              >
-                <option value="">{t('home.optionSelectFolder')}</option>
-                {folderSelectOptionsForFile.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <p className="text-sm text-muted-foreground">{t('home.moveFolderToRoot')}</p>
-            )}
+            <select
+              id="move-target"
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={moveToFolderId ?? ''}
+              onChange={(e) => setMoveToFolderId(e.target.value || null)}
+            >
+              <option value="">{t('home.optionSelectFolder')}</option>
+              {folderSelectOptionsForFile.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
           <DialogFooter>
             <Button variant="secondary" onClick={() => setMoveTarget(null)}>
