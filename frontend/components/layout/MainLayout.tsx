@@ -15,7 +15,7 @@ export interface MainLayoutProps {
   sidebarReplacement?: React.ReactNode;
 }
 
-const SIDEBAR_STORAGE_KEY = 'solo-board-sidebar-collapsed';
+const SIDEBAR_STORAGE_KEY = 'solo-board-editor-sidebar-collapsed';
 
 export function MainLayout({ children, sidebarReplacement }: MainLayoutProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -44,7 +44,9 @@ export function MainLayout({ children, sidebarReplacement }: MainLayoutProps) {
     if (!isEditorPage) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'b' && !e.metaKey) {
+      const isToggleKey = e.key === 'b' || e.key === 'B';
+      const isModKey = (e.ctrlKey && !e.metaKey) || e.metaKey;
+      if (isToggleKey && isModKey) {
         e.preventDefault();
         setSidebarCollapsed((prev) => {
           const next = !prev;
@@ -86,7 +88,7 @@ export function MainLayout({ children, sidebarReplacement }: MainLayoutProps) {
             variant="ghost"
             size="icon"
             className={cn(
-              'fixed top-16 z-50 h-8 w-8 rounded-r-md rounded-l-none border-r border-t border-b border-border bg-card shadow-sm transition-all duration-300 hover:bg-accent',
+              'fixed top-32 z-50 h-8 w-8 rounded-r-md rounded-l-none border-r border-t border-b border-border bg-card shadow-sm transition-all duration-300 hover:bg-accent',
               effectiveCollapsed ? 'left-0' : 'left-64',
             )}
             onClick={toggleSidebar}

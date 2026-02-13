@@ -9,7 +9,7 @@ import { fileApi } from '@/lib/api';
 import { createExcalidrawAdapter } from '@/lib/excalidraw/adapter';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/utils';
-import { ArrowLeft, Loader2, FileImage } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { BoardCardThumbnail } from '@/components/BoardCardThumbnail';
 import { cn } from '@/lib/utils';
 import { useLocale } from '@/components/LocaleProvider';
@@ -131,12 +131,23 @@ export default function EditorPage() {
   const performSave = useCallback(
     async (source: 'manual' | 'auto') => {
       // 避免在画板内容尚未从服务端加载完成时触发保存，防止用空白状态覆盖真实数据
-      if (loading) return;
-      if (!dirty) return;
-      if (saving) {
-        if (source === 'auto') {
-          pendingAutoSaveRef.current = true;
+      if (loading) {
+        if (source === 'manual') {
+          // 与 PRD 对齐：无可保存内容时给出轻量提示
+          toast.info(t('editor.noChanges'));
         }
+        return;
+      }
+      if (!dirty) {
+        if (source === 'manual') {
+          toast.info(t('editor.noChanges'));
+        }
+        return;
+      }
+      if (saving) {
+        // 自动/手动保存均复用“最后一次变更优先”策略：
+        // 当前在保存中时只打标记，等本次结束后再补一次自动保存。
+        pendingAutoSaveRef.current = true;
         return;
       }
 
@@ -176,6 +187,7 @@ export default function EditorPage() {
 
   const handleBack = () => {
     if (dirty) {
+      setPendingNavigation('/');
       setShowLeaveDialog(true);
     } else {
       router.push('/');
@@ -343,6 +355,26 @@ export default function EditorPage() {
     </div>
   );
 
+  // Ctrl+S / Cmd+S：立即触发一次保存或提示“当前已保存”（PRD 2.3 / 10.1）
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isSaveKey = e.key === 's' || e.key === 'S';
+      const isModKey = (e.ctrlKey && !e.metaKey) || e.metaKey;
+      if (!isSaveKey || !isModKey) return;
+      const target = e.target as Node | null;
+      if (target && typeof (target as HTMLElement).closest === 'function') {
+        const el = (target as HTMLElement).closest('input, textarea, [contenteditable="true"]');
+        if (el) return;
+      }
+
+      e.preventDefault();
+      startTransition(() => performSave('manual'));
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [performSave]);
+
   if (loading) {
     return (
       <MainLayout>
@@ -356,12 +388,23 @@ export default function EditorPage() {
   return (
     <MainLayout sidebarReplacement={editorSidebar}>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Mobile: top bar with back only (auto-save, no manual save button) */}
+        {/* Mobile: 顶部返回 + 保存状态（无显式“保存”按钮） */}
         <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-4 py-2 lg:hidden">
           <Button variant="ghost" size="sm" onClick={handleBack}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             {t('editor.back')}
           </Button>
+          {saveStatusText ? (
+            <span className="text-xs text-muted-foreground">{saveStatusText}</span>
+          ) : null}
+        </div>
+        {/* Desktop: 顶部文件名 + 保存状态栏 */}
+        <div className="hidden shrink-0 items-center justify-between border-b border-border bg-card/80 px-6 py-3 lg:flex">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm font-semibold text-foreground">
+              {displayFileName || t('editor.untitled')}
+            </span>
+          </div>
           {saveStatusText ? (
             <span className="text-xs text-muted-foreground">{saveStatusText}</span>
           ) : null}
