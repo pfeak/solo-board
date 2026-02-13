@@ -4,9 +4,17 @@ A lightweight, self-hosted solo whiteboard built on Excalidraw, designed for per
 
 If you find this useful, a star would be appreciated. Pull requests and issues are welcome.
 
-![Demo 1](docs/assets/demo1.png)
+<p align="center">
+  <a href="docs/assets/demo1.png" target="_blank">
+    <img src="docs/assets/demo1.png" alt="Demo 1" width="500" style="max-width:100%;border-radius:8px;box-shadow:0 2px 16px rgba(0,0,0,0.08);margin-bottom:16px;" />
+  </a>
+  <br/>
+  <a href="docs/assets/demo2.png" target="_blank">
+    <img src="docs/assets/demo2.png" alt="Demo 2" width="500" style="max-width:100%;border-radius:8px;box-shadow:0 2px 16px rgba(0,0,0,0.08);" />
+  </a>
+</p>
 
-![Demo 2](docs/assets/demo2.png)
+<sub align="center">Click the images to enlarge and preview</sub>
 
 ## Quick Start
 
