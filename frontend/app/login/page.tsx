@@ -142,10 +142,6 @@ export default function LoginPage() {
                 )}
               </Button>
             </form>
-
-            <p className="text-center text-sm text-muted-foreground">
-              {t('login.defaultAccount')}
-            </p>
           </div>
           <p className="mt-4 text-center text-sm text-muted-foreground">
             {t('login.poweredByPrefix')}

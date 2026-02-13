@@ -39,3 +39,4 @@ lerna-debug.log*
 .cache/
 
 .pnpm-store/
+deploy/data/

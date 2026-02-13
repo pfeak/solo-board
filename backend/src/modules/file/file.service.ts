@@ -2,12 +2,10 @@
  * File module: business logic.
  */
 
-import prismaPkg from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { generateUUID } from '../../lib/uuid.js';
 import { getCurrentTimestamp } from '../../lib/time.js';
 import { NotFoundError, ConflictError, BusinessError } from '../../core/errors.js';
-
-const { PrismaClient } = prismaPkg;
 
 export interface FileItem {
   id: string;

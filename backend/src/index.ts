@@ -13,7 +13,7 @@ import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import swaggerUI from '@fastify/swagger-ui';
-import prismaPkg from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 
 import { loadConfig } from './config.js';
@@ -25,8 +25,6 @@ import { generateUUID } from './lib/uuid.js';
 import { getCurrentTimestamp } from './lib/time.js';
 import { verifySessionCookie, SESSION_COOKIE_NAME } from './plugins/session.js';
 
-const { PrismaClient } = prismaPkg;
-
 async function bootstrap() {
   const config = loadConfig();
 
@@ -36,31 +34,37 @@ async function bootstrap() {
     },
   });
 
-  // Dev-only safety net: ensure a default admin exists.
-  // This prevents "login always 401" when migrations/seed weren't run yet.
-  if (process.env.NODE_ENV !== 'production') {
-    const prisma = new PrismaClient();
-    try {
-      const existing = await prisma.admin.findUnique({ where: { username: 'admin' } });
-      if (!existing) {
-        const passwordHash = await bcrypt.hash('123456', 10);
-        await prisma.admin.create({
-          data: {
-            id: generateUUID(),
-            username: 'admin',
-            passwordHash,
-            createdAt: getCurrentTimestamp(),
-            isInitialPassword: true,
-          },
-        });
-        app.log.info('Created default admin user (dev): admin / 123456');
-      }
-    } catch (err) {
-      app.log.warn({ err }, 'Failed to ensure default admin user');
-    } finally {
-      await prisma.$disconnect();
+  // Single shared PrismaClient for the whole app (ensures same DB as default-admin creation).
+  const prisma = new PrismaClient();
+  try {
+    app.log.info(`Database URL: ${config.DATABASE_URL}`);
+    await prisma.$connect();
+    app.log.info('Database connection established');
+
+    const adminCount = await prisma.admin.count();
+    app.log.info(`Current admin count: ${adminCount}`);
+
+    if (adminCount === 0) {
+      const defaultUsername = config.DEFAULT_ADMIN_USERNAME;
+      const defaultPassword = config.DEFAULT_ADMIN_PASSWORD;
+      const passwordHash = await bcrypt.hash(defaultPassword, 10);
+      const admin = await prisma.admin.create({
+        data: {
+          id: generateUUID(),
+          username: defaultUsername,
+          passwordHash,
+          createdAt: getCurrentTimestamp(),
+          isInitialPassword: true,
+        },
+      });
+      app.log.info(`Created default admin user: ${defaultUsername} / ${defaultPassword} (ID: ${admin.id})`);
+    } else {
+      app.log.info('Admin users already exist, skipping default admin creation');
     }
+  } catch (err) {
+    app.log.error({ err, databaseUrl: config.DATABASE_URL }, 'Failed to ensure default admin user');
   }
+  // Do NOT disconnect – routes use the same prisma instance
 
   // CORS configuration allowing frontend to send cookies
   await app.register(cors, {
@@ -125,10 +129,10 @@ async function bootstrap() {
     return { detail: 'Solo-Board backend API. See /docs for OpenAPI spec.' };
   });
 
-  // Register business routes
-  await registerAuthRoutes(app);
-  await registerFolderRoutes(app);
-  await registerFileRoutes(app);
+  // Register business routes (share same prisma instance)
+  await registerAuthRoutes(app, prisma);
+  await registerFolderRoutes(app, prisma);
+  await registerFileRoutes(app, prisma);
 
   try {
     await app.listen({ port: config.PORT, host: '0.0.0.0' });

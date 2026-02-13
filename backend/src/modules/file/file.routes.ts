@@ -3,7 +3,7 @@
  */
 
 import { FastifyInstance } from 'fastify';
-import prismaPkg from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { FileService } from './file.service.js';
 import {
   getFilesSchema,
@@ -13,10 +13,7 @@ import {
   deleteFileSchema,
 } from './file.schema.js';
 
-const { PrismaClient } = prismaPkg;
-
-export async function registerFileRoutes(app: FastifyInstance) {
-  const prisma = new PrismaClient();
+export async function registerFileRoutes(app: FastifyInstance, prisma: PrismaClient) {
   const fileService = new FileService(prisma);
 
   // Get file list

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,7 @@ const LOCALE_OPTIONS: { value: Locale; labelKey: string }[] = [
   { value: 'zh', labelKey: 'preferences.chinese' },
 ];
 
-export default function PreferencesPage() {
+function PreferencesContent() {
   const searchParams = useSearchParams();
   const isFirstTime = searchParams.get('first') === '1';
   const { t, locale } = useLocale();
@@ -116,5 +116,24 @@ export default function PreferencesPage() {
         </div>
       </MainLayout>
     </ErrorBoundary>
+  );
+}
+
+export default function PreferencesPage() {
+  return (
+    <Suspense
+      fallback={
+        <ErrorBoundary>
+          <MainLayout>
+            <div className="container mx-auto max-w-4xl space-y-6 p-6">
+              <div className="h-10 w-48 rounded bg-muted animate-pulse" />
+              <div className="h-64 rounded-lg bg-muted animate-pulse" />
+            </div>
+          </MainLayout>
+        </ErrorBoundary>
+      }
+    >
+      <PreferencesContent />
+    </Suspense>
   );
 }

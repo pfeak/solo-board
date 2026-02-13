@@ -42,7 +42,7 @@ export function ExcalidrawWrapper({
       appState: parsed.appState,
       files: parsed.files,
       scrollToContent: parsed.elements.length > 0,
-    };
+    } as any;
   }, [initialContent]);
 
   useEffect(() => {

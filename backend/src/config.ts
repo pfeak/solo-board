@@ -19,6 +19,8 @@ export interface AppConfig {
   CORS_ORIGINS: string[];
   SESSION_SECRET: string;
   SESSION_TTL: number;
+  DEFAULT_ADMIN_USERNAME: string;
+  DEFAULT_ADMIN_PASSWORD: string;
 }
 
 export function loadConfig(): AppConfig {
@@ -31,6 +33,8 @@ export function loadConfig(): AppConfig {
     CORS_ORIGINS = '',
     SESSION_SECRET = 'change-me-in-production',
     SESSION_TTL = '604800', // 7 days in seconds
+    DEFAULT_ADMIN_USERNAME = 'admin',
+    DEFAULT_ADMIN_PASSWORD = '123456',
   } = process.env;
 
   const origins =
@@ -47,6 +51,8 @@ export function loadConfig(): AppConfig {
     CORS_ORIGINS: origins,
     SESSION_SECRET,
     SESSION_TTL: Number(SESSION_TTL),
+    DEFAULT_ADMIN_USERNAME,
+    DEFAULT_ADMIN_PASSWORD,
   };
 }
 

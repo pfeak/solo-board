@@ -3,7 +3,7 @@
  */
 
 import { FastifyInstance } from 'fastify';
-import prismaPkg from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { AuthService } from './auth.service.js';
 import {
   loginSchema,
@@ -21,10 +21,7 @@ import {
 } from '../../plugins/session.js';
 import { getCurrentTimestamp } from '../../lib/time.js';
 
-const { PrismaClient } = prismaPkg;
-
-export async function registerAuthRoutes(app: FastifyInstance) {
-  const prisma = new PrismaClient();
+export async function registerAuthRoutes(app: FastifyInstance, prisma: PrismaClient) {
   const authService = new AuthService(prisma);
 
   // Login (no auth required)

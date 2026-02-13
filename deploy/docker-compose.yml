@@ -1,0 +1,15 @@
+services:
+  solo-board:
+    image: pfeak/solo-board:latest
+    container_name: solo-board
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/backend/data/dev.db
+      - LOG_LEVEL=info
+      - DEFAULT_ADMIN_USERNAME=pfeak
+      - DEFAULT_ADMIN_PASSWORD=666666
+    volumes:
+      - ./data/solo-board-data:/app/backend/data
+    restart: unless-stopped

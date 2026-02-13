@@ -6,6 +6,48 @@ If you find this useful, a star would be appreciated. Pull requests and issues a
 
 ## Quick Start
 
+### Docker (recommended)
+
+```bash
+docker run -d -p 3000:3000 --name solo-board pfeak/solo-board:latest
+```
+
+Open <http://localhost:3000>. To persist data, add a volume:
+
+```bash
+docker run -d -p 3000:3000 -v solo-board-data:/app/backend/data --name solo-board pfeak/solo-board:latest
+```
+
+### Docker Compose
+
+For advanced or production usage, use docker-compose for easy environment management and data persistence.
+
+```yaml
+services:
+  solo-board:
+    image: pfeak/solo-board:latest
+    container_name: solo-board
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/backend/data/dev.db
+      - LOG_LEVEL=info
+      - DEFAULT_ADMIN_USERNAME=admin
+      - DEFAULT_ADMIN_PASSWORD=123456
+    volumes:
+      - ./data/solo-board-data:/app/backend/data
+    restart: unless-stopped
+```
+
+To start:
+
+```bash
+docker-compose up -d
+```
+
+For more details, see [`deploy/docker-compose.yml`](deploy/docker-compose.yml).
+
 ### Prerequisites
 
 - Node.js 18+
