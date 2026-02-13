@@ -283,16 +283,19 @@ export default function EditorPage() {
         <span className="text-lg font-semibold text-foreground">Solo-Board</span>
       </div>
       <div className="flex flex-1 flex-col gap-4 p-4 overflow-y-auto">
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          className="justify-between group w-full hover:bg-accent/50 transition-colors" 
+        <Button
+          variant="ghost"
+          size="sm"
+          className="justify-between group w-full hover:bg-accent/50 transition-colors"
           onClick={handleBack}
         >
           <div className="flex items-center">
             <ArrowLeft className="mr-2 h-4 w-4" />
             <span>{t('editor.back')}</span>
           </div>
+          <span className="rounded bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground/80 group-hover:bg-muted/60 transition-colors">
+            {t('mainLayout.sidebarShortcut')}
+          </span>
         </Button>
 
         {/* 切换画板时的保存等待提示 */}
