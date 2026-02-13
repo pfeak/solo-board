@@ -39,7 +39,8 @@ export type ExcalidrawAdapter = {
    * IMPORTANT: Upper layers must treat this as opaque and never call it directly.
    */
   bindApi(api: unknown | null): void;
-  load(content: string | object | null): void;
+  /** Load content; returns a Promise so callers can wait for restore() when loading official Excalidraw files. */
+  load(content: string | object | null): Promise<void>;
   serialize(): SoloBoardExcalidrawContentV1;
   isDirty(): boolean;
   markSaved(): void;
@@ -91,8 +92,11 @@ class ExcalidrawAdapterImpl implements ExcalidrawAdapter {
         this.pendingContent = null;
         // Defer so Excalidraw has a full frame to initialize before we overwrite scene.
         setTimeout(() => {
-          if (this.api) this.load(content);
-          this.emitEvent({ type: 'ready' });
+          if (this.api) {
+            this.load(content).then(() => this.emitEvent({ type: 'ready' }));
+          } else {
+            this.emitEvent({ type: 'ready' });
+          }
         }, 0);
       } else {
         this.emitEvent({ type: 'ready' });
@@ -100,7 +104,7 @@ class ExcalidrawAdapterImpl implements ExcalidrawAdapter {
     }
   }
 
-  load(content: string | object | null): void {
+  async load(content: string | object | null): Promise<void> {
     if (!this.api) {
       this.pendingContent =
         content == null ? null : typeof content === 'string' ? content : JSON.stringify(content);
@@ -115,22 +119,32 @@ class ExcalidrawAdapterImpl implements ExcalidrawAdapter {
         parsed = content;
       }
 
-      // Handle legacy Excalidraw format or V1 format
+      // Handle our schema vs official Excalidraw format
+      const isOurSchema =
+        parsed?.schema === 'solo-board/excalidraw-content' && parsed?.schemaVersion === 1;
+
       let elements: unknown[] = [];
       let appState: Record<string, unknown> = {};
       let files: Record<string, unknown> = {};
 
       if (parsed) {
-        if (parsed.schema === 'solo-board/excalidraw-content' && parsed.schemaVersion === 1) {
-          elements = parsed.elements || [];
-          appState = parsed.appState || {};
-          files = parsed.files || {};
-        } else {
-          // Legacy format: assume it's Excalidraw native format
-          elements = parsed.elements || [];
-          appState = parsed.appState || {};
-          files = parsed.files || {};
-        }
+        elements = parsed.elements ?? [];
+        appState = parsed.appState ?? {};
+        files = parsed.files ?? {};
+      }
+
+      // Official Excalidraw files need restore() so elements (especially text) are properly hydrated.
+      // Our saved files were already in runtime shape, so skip restore to avoid double-processing.
+      if (!isOurSchema && (elements.length > 0 || Object.keys(appState).length > 0 || Object.keys(files as object).length > 0)) {
+        const { restore } = await import('@excalidraw/excalidraw');
+        const restored = restore(
+          { elements: elements as any, appState: appState as any, files: files as any },
+          null,
+          null,
+        );
+        elements = restored.elements;
+        appState = restored.appState as Record<string, unknown>;
+        files = restored.files as Record<string, unknown>;
       }
 
       // Excalidraw UserList expects appState.collaborators to be an array; when loading
@@ -140,12 +154,14 @@ class ExcalidrawAdapterImpl implements ExcalidrawAdapter {
         appState = { ...appState, collaborators: Array.isArray(c) ? c : Object.values(c ?? {}) };
       }
 
+      // Ensure canvas shows solid white background when loading official/imported files.
+      appState = normalizeAppStateForCanvas(appState);
+
       // Update scene
       this.api.updateScene({
         elements: elements as any,
         appState: appState as any,
         files: files as any,
-        // Avoid polluting local undo/redo stack for remote/initial sync.
         captureUpdate: CAPTURE_UPDATE_NEVER,
       });
 
@@ -261,8 +277,72 @@ class ExcalidrawAdapterImpl implements ExcalidrawAdapter {
     // Stable snapshot for comparisons; excludes volatile fields like updatedAt.
     return JSON.stringify({ elements, appState, files });
   }
+
 }
 
 export function createExcalidrawAdapter(): ExcalidrawAdapter {
   return new ExcalidrawAdapterImpl();
+}
+
+/** Normalize appState so canvas shows solid white background, no grid (match thumbnail/export). */
+function normalizeAppStateForCanvas(appState: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...appState };
+  const vbc = appState.viewBackgroundColor;
+  const isMissingOrTransparent =
+    vbc == null ||
+    vbc === '' ||
+    String(vbc).toLowerCase() === 'transparent' ||
+    (typeof vbc === 'string' && vbc.length >= 2 && vbc.slice(-2).toLowerCase() === '00');
+  if (isMissingOrTransparent) {
+    (next as any).viewBackgroundColor = '#ffffff';
+  }
+  if (appState.exportBackground === undefined || appState.exportBackground === null) {
+    (next as any).exportBackground = true;
+  }
+  // Hide grid so canvas is pure white like thumbnail/export (gridSize null = grid off).
+  (next as any).gridSize = null;
+  return next;
+}
+
+export type ParsedExcalidrawContent = {
+  elements: unknown[];
+  appState: Record<string, unknown>;
+  files: Record<string, unknown>;
+  /** True when content is solo-board schema; false for official .excalidraw format. */
+  isOurSchema: boolean;
+};
+
+/**
+ * Parse Excalidraw content (string or object) and return normalized elements, appState, files.
+ * Use initialData only when isOurSchema: true (our saved files). Official files are loaded via load() + restore().
+ */
+export function parseExcalidrawContent(content: string | object | null): ParsedExcalidrawContent | null {
+  if (content == null) return null;
+  let parsed: any;
+  if (typeof content === 'string') {
+    if (!content.trim()) return null;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      return null;
+    }
+  } else {
+    parsed = content;
+  }
+  const isOurSchema =
+    parsed?.schema === 'solo-board/excalidraw-content' && parsed?.schemaVersion === 1;
+  let elements: unknown[] = [];
+  let appState: Record<string, unknown> = {};
+  let files: Record<string, unknown> = {};
+  if (parsed) {
+    elements = parsed.elements || [];
+    appState = parsed.appState || {};
+    files = parsed.files || {};
+  }
+  if (appState && typeof appState.collaborators !== 'undefined') {
+    const c = appState.collaborators;
+    appState = { ...appState, collaborators: Array.isArray(c) ? c : Object.values(c ?? {}) };
+  }
+  appState = normalizeAppStateForCanvas(appState);
+  return { elements, appState, files, isOurSchema };
 }

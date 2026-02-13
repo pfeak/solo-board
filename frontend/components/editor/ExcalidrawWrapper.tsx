@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import {
   type ExcalidrawTheme,
   type ExcalidrawAdapter,
+  parseExcalidrawContent,
 } from '@/lib/excalidraw/adapter';
 
 const Excalidraw = dynamic(
@@ -27,12 +28,29 @@ export function ExcalidrawWrapper({
 }: ExcalidrawWrapperProps) {
   const lastLoadedContentRef = useRef<string | null>(null);
 
+  // Parse content once for initialData so the first paint has correct background and text.
+  // Using initialData avoids updateScene() timing issues that can leave text or background broken.
+  // Only use initialData for our own saved files (solo-board schema). Official Excalidraw
+  // files are loaded via load() + restore() so text and background render correctly.
+  const initialData = useMemo(() => {
+    const raw = initialContent ?? null;
+    if (raw == null) return undefined;
+    const parsed = parseExcalidrawContent(raw);
+    if (!parsed || !parsed.isOurSchema) return undefined;
+    return {
+      elements: parsed.elements,
+      appState: parsed.appState,
+      files: parsed.files,
+      scrollToContent: parsed.elements.length > 0,
+    };
+  }, [initialContent]);
+
   useEffect(() => {
     const unsubscribe = adapter.onEvent((evt) => {
       if (evt.type === 'change') {
         onDirtyChange?.(evt.dirty);
       }
-      // When API becomes ready, re-apply initial content so we never show empty after load.
+      // When API becomes ready, sync adapter snapshot (in case we used initialData).
       if (evt.type === 'ready' && initialContent !== undefined) {
         const normalized = initialContent ?? null;
         adapter.load(normalized);
@@ -80,6 +98,7 @@ export function ExcalidrawWrapper({
         excalidrawAPI={handleExcalidrawAPI}
         onChange={() => adapter.handleChange()}
         theme={theme}
+        initialData={initialData}
       />
     </div>
   );
