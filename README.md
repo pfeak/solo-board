@@ -2,6 +2,8 @@
 
 A lightweight, self-hosted solo whiteboard built on Excalidraw, designed for personal diagram and knowledge organization.
 
+If you find this useful, a star would be appreciated. Pull requests and issues are welcome.
+
 ## Quick Start
 
 ### Prerequisites
