@@ -12,7 +12,6 @@ If you find this useful, a star would be appreciated. Pull requests and issues a
     <img src="docs/assets/demo2.png" alt="Demo 2" width="45%" style="display:inline-block;" />
   </a>
   <br>
-  <em>Click images to enlarge</em>
 </p>
 
 ## Quick Start
